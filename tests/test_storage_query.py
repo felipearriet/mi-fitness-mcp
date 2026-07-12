@@ -43,11 +43,14 @@ def test_storage_and_query_roundtrip(tmp_path):
         user_id="u1",
         workout_id="detected_1",
         activity_type="detected_activity",
+        sport_category="walking",
         start_at=datetime(2025, 4, 1, 12, 0, 0),
         end_at=datetime(2025, 4, 1, 12, 30, 0),
         duration_minutes=30,
         distance_m=3000,
         calories_kcal=200,
+        extended_metrics={"train_effect": 2.0},
+        raw_payload={"sport_type": 2},
     )
 
     db.insert_daily_activity(activity)
@@ -59,6 +62,9 @@ def test_storage_and_query_roundtrip(tmp_path):
     assert len(query.get_daily_summaries("2025-04-01", "2025-04-01")) == 1
     assert len(query.get_heart_rate_samples("2025-04-01", "2025-04-01")) == 1
     assert len(query.get_body_measurements("2025-04-01", "2025-04-01")) == 1
-    assert len(query.get_workouts("2025-04-01", "2025-04-01")) == 1
+    workouts = query.get_workouts("2025-04-01", "2025-04-01")
+    assert len(workouts) == 1
+    assert workouts[0]["sport_category"] == "walking"
+    assert workouts[0]["extended_metrics"]["train_effect"] == 2.0
     assert db.delete_detected_workouts("u1", "2025-04-01", "2025-04-01") == 1
     assert query.get_workouts("2025-04-01", "2025-04-01") == []

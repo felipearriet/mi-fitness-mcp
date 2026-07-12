@@ -59,6 +59,7 @@ class Workout(BaseEntity):
 
     workout_id: str = Field(description="Unique workout ID")
     activity_type: str = Field(description="Type of activity (running, cycling, etc.)")
+    sport_category: str | None = Field(None, description="Xiaomi sport category")
     start_at: datetime = Field(description="Workout start time")
     end_at: datetime = Field(description="Workout end time")
     duration_minutes: int = Field(ge=0, description="Duration in minutes")
@@ -69,6 +70,12 @@ class Workout(BaseEntity):
     avg_pace_sec_per_km: float | None = Field(None, ge=0, description="Average pace")
     max_pace_sec_per_km: float | None = Field(None, ge=0, description="Maximum pace")
     total_steps: int | None = Field(None, ge=0, description="Steps during workout")
+    extended_metrics: dict[str, Any] = Field(
+        default_factory=dict, description="Additional normalized sport metrics"
+    )
+    raw_payload: dict[str, Any] = Field(
+        default_factory=dict, description="Original Xiaomi sport record payload"
+    )
 
 
 class BodyMeasurement(BaseEntity):

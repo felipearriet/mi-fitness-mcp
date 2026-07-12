@@ -98,6 +98,7 @@ class Database:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     workout_id TEXT NOT NULL,
                     activity_type TEXT NOT NULL,
+                    sport_category TEXT,
                     start_at TIMESTAMP NOT NULL,
                     end_at TIMESTAMP NOT NULL,
                     duration_minutes INTEGER NOT NULL,
@@ -108,9 +109,22 @@ class Database:
                     avg_pace_sec_per_km REAL,
                     max_pace_sec_per_km REAL,
                     total_steps INTEGER,
+                    extended_metrics TEXT,
+                    raw_payload TEXT,
                     UNIQUE(user_id, workout_id)
                 )
             """)
+
+            workout_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(workouts)").fetchall()
+            }
+            for column, column_type in (
+                ("sport_category", "TEXT"),
+                ("extended_metrics", "TEXT"),
+                ("raw_payload", "TEXT"),
+            ):
+                if column not in workout_columns:
+                    conn.execute(f"ALTER TABLE workouts ADD COLUMN {column} {column_type}")
 
             # Body measurements table
             conn.execute("""
@@ -295,16 +309,26 @@ class Database:
                 """
                 INSERT INTO workouts (
                     id, provider, source_type, source_record_id, user_id, device_id,
-                    timezone, collected_at, workout_id, activity_type, start_at, end_at,
+                    timezone, collected_at, workout_id, activity_type, sport_category, start_at, end_at,
                     duration_minutes, distance_m, calories_kcal, avg_heart_rate_bpm,
-                    max_heart_rate_bpm, avg_pace_sec_per_km, max_pace_sec_per_km, total_steps
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    max_heart_rate_bpm, avg_pace_sec_per_km, max_pace_sec_per_km, total_steps,
+                    extended_metrics, raw_payload
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id, workout_id) DO UPDATE SET
+                    activity_type = excluded.activity_type,
+                    sport_category = excluded.sport_category,
+                    start_at = excluded.start_at,
+                    end_at = excluded.end_at,
                     duration_minutes = excluded.duration_minutes,
                     distance_m = excluded.distance_m,
                     calories_kcal = excluded.calories_kcal,
                     avg_heart_rate_bpm = excluded.avg_heart_rate_bpm,
                     max_heart_rate_bpm = excluded.max_heart_rate_bpm,
+                    avg_pace_sec_per_km = excluded.avg_pace_sec_per_km,
+                    max_pace_sec_per_km = excluded.max_pace_sec_per_km,
+                    total_steps = excluded.total_steps,
+                    extended_metrics = excluded.extended_metrics,
+                    raw_payload = excluded.raw_payload,
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (
@@ -318,6 +342,7 @@ class Database:
                     workout.collected_at.isoformat() if workout.collected_at else None,
                     workout.workout_id,
                     workout.activity_type,
+                    workout.sport_category,
                     workout.start_at.isoformat(),
                     workout.end_at.isoformat(),
                     workout.duration_minutes,
@@ -328,6 +353,8 @@ class Database:
                     workout.avg_pace_sec_per_km,
                     workout.max_pace_sec_per_km,
                     workout.total_steps,
+                    json.dumps(workout.extended_metrics),
+                    json.dumps(workout.raw_payload),
                 ),
             )
             conn.commit()

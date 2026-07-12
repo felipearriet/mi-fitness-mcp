@@ -11,7 +11,6 @@ from urllib.parse import urlencode
 
 import httpx
 
-
 LOGIN_PREFIX = b"&&&START&&&"
 DEFAULT_KEYS = [
     "weight",
@@ -51,7 +50,7 @@ def read_login_payload(text: str) -> dict:
     body = text.encode()
     if not body.startswith(LOGIN_PREFIX):
         raise RuntimeError("unexpected Xiaomi login response")
-    return json.loads(body[len(LOGIN_PREFIX):].decode())
+    return json.loads(body[len(LOGIN_PREFIX) :].decode())
 
 
 def rc4_crypt(key: bytes, payload: bytes) -> bytes:
@@ -112,7 +111,9 @@ class MiFitnessProbe:
         auth = self.service_login2(info, username, password)
         self.service_login3(auth["location"])
 
-    def login_with_token(self, token: str | None = None, user_id: str | None = None, pass_token: str | None = None) -> None:
+    def login_with_token(
+        self, token: str | None = None, user_id: str | None = None, pass_token: str | None = None
+    ) -> None:
         if token:
             user_id, pass_token = token.split(":", 1)
         if not user_id or not pass_token:
@@ -124,7 +125,12 @@ class MiFitnessProbe:
         )
         response.raise_for_status()
         payload = read_login_payload(response.text)
-        if "passToken" not in payload or "ssecurity" not in payload or "userId" not in payload or "location" not in payload:
+        if (
+            "passToken" not in payload
+            or "ssecurity" not in payload
+            or "userId" not in payload
+            or "location" not in payload
+        ):
             details = {
                 "keys": sorted(payload.keys()),
                 "code": payload.get("code"),
@@ -132,14 +138,18 @@ class MiFitnessProbe:
                 "desc": payload.get("desc"),
                 "location": payload.get("location"),
             }
-            raise RuntimeError(f"xiaomi token login failed; details={json.dumps(details, ensure_ascii=False)}")
+            raise RuntimeError(
+                f"xiaomi token login failed; details={json.dumps(details, ensure_ascii=False)}"
+            )
         self.pass_token = payload["passToken"]
         self.ssecurity = base64.b64decode(payload["ssecurity"])
         self.user_id = int(payload["userId"])
         self.service_login3(payload["location"])
 
     def service_login(self) -> dict:
-        response = self.client.get(f"https://account.xiaomi.com/pass/serviceLogin?_json=true&sid={self.sid}")
+        response = self.client.get(
+            f"https://account.xiaomi.com/pass/serviceLogin?_json=true&sid={self.sid}"
+        )
         response.raise_for_status()
         return read_login_payload(response.text)
 
@@ -153,7 +163,10 @@ class MiFitnessProbe:
             "qs": info["qs"],
             "user": username,
         }
-        device_id = "".join(random.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") for _ in range(16))
+        device_id = "".join(
+            random.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+            for _ in range(16)
+        )
         response = self.client.post(
             "https://account.xiaomi.com/pass/serviceLoginAuth2",
             headers={
@@ -175,7 +188,9 @@ class MiFitnessProbe:
                 "notificationUrl": payload.get("notificationUrl"),
                 "location": payload.get("location"),
             }
-            raise RuntimeError(f"xiaomi login failed: {message or 'missing auth tokens'}; details={json.dumps(details, ensure_ascii=False)}")
+            raise RuntimeError(
+                f"xiaomi login failed: {message or 'missing auth tokens'}; details={json.dumps(details, ensure_ascii=False)}"
+            )
         self.pass_token = payload["passToken"]
         self.ssecurity = base64.b64decode(payload["ssecurity"])
         self.user_id = int(payload["userId"])
@@ -252,12 +267,16 @@ def run_probe(args: argparse.Namespace) -> None:
                     "/app/v1/data/get_fitness_data_by_time",
                     {
                         "start_time": int(datetime.fromisoformat(args.start_date).timestamp()),
-                        "end_time": int(datetime.fromisoformat(args.end_date + "T23:59:59").timestamp()),
+                        "end_time": int(
+                            datetime.fromisoformat(args.end_date + "T23:59:59").timestamp()
+                        ),
                         "key": key,
                     },
                 )
                 data_list = result.get("data_list", [])
-                print(f"key={key} count={len(data_list)} has_more={result.get('has_more')} next_key={bool(result.get('next_key'))}")
+                print(
+                    f"key={key} count={len(data_list)} has_more={result.get('has_more')} next_key={bool(result.get('next_key'))}"
+                )
                 if data_list:
                     print(sample_view(data_list))
             except Exception as exc:

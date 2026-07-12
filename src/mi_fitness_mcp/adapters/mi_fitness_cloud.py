@@ -377,6 +377,30 @@ class MiFitnessCloudAdapter(DataAdapter):
                 duration_seconds = int(payload.get("duration", max(0, end_ts - start_ts)))
                 sid = str(record.get("sid", "unknown"))
                 activity_type = str(record.get("key") or record.get("category") or "unknown")
+                metric_keys = (
+                    "avg_speed",
+                    "max_speed",
+                    "avg_cadence",
+                    "max_cadence",
+                    "min_hrm",
+                    "train_effect",
+                    "anaerobic_train_effect",
+                    "train_load",
+                    "train_load_level",
+                    "recover_time",
+                    "vo2_max",
+                    "rise_height",
+                    "fall_height",
+                    "vitality",
+                    "hrm_warm_up_duration",
+                    "hrm_fat_burning_duration",
+                    "hrm_aerobic_duration",
+                    "hrm_anaerobic_duration",
+                    "hrm_extreme_duration",
+                )
+                extended_metrics = {
+                    key: payload[key] for key in metric_keys if payload.get(key) is not None
+                }
 
                 yield Workout(
                     id=f"mi_fitness_workout_{sid}_{start_ts}",
@@ -388,6 +412,7 @@ class MiFitnessCloudAdapter(DataAdapter):
                     timezone=str(record.get("zone_name") or "UTC"),
                     workout_id=f"{sid}_{start_ts}_{activity_type}",
                     activity_type=activity_type,
+                    sport_category=str(record.get("category") or "") or None,
                     start_at=datetime.fromtimestamp(start_ts + zone_offset, tz=UTC).replace(
                         tzinfo=None
                     ),
@@ -402,6 +427,8 @@ class MiFitnessCloudAdapter(DataAdapter):
                     avg_pace_sec_per_km=self._optional_float(payload.get("avg_pace")),
                     max_pace_sec_per_km=self._optional_float(payload.get("max_pace")),
                     total_steps=self._optional_int(payload.get("steps")),
+                    extended_metrics=extended_metrics,
+                    raw_payload=payload,
                 )
             return
 

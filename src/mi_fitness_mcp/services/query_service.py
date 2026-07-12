@@ -1,5 +1,6 @@
 """Query service for retrieving data from database."""
 
+import json
 from contextlib import suppress
 from datetime import datetime, timedelta
 from typing import Any
@@ -217,6 +218,7 @@ class QueryService:
                 {
                     "workout_id": record["workout_id"],
                     "activity_type": record["activity_type"],
+                    "sport_category": record.get("sport_category"),
                     "start_at": record["start_at"],
                     "end_at": record["end_at"],
                     "duration_minutes": record["duration_minutes"],
@@ -227,6 +229,11 @@ class QueryService:
                     "avg_pace_sec_per_km": record.get("avg_pace_sec_per_km"),
                     "max_pace_sec_per_km": record.get("max_pace_sec_per_km"),
                     "total_steps": record.get("total_steps"),
+                    "extended_metrics": (
+                        json.loads(record["extended_metrics"])
+                        if record.get("extended_metrics")
+                        else {}
+                    ),
                 }
             )
 

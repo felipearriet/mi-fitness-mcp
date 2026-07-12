@@ -22,6 +22,8 @@ Confirmed with the current cloud flow:
   - duration, distance, steps, and calories
   - average and maximum heart rate
   - average pace when distance is available
+  - training effect, training load, recovery time, cadence, elevation, and heart-rate zones
+  - original Xiaomi payload retained locally for forward-compatible analysis
 - body measurements
   - weight
   - BMI

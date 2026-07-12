@@ -154,7 +154,7 @@ async def test_iter_workouts_prefers_official_sport_records(monkeypatch):
                 "value": (
                     '{"start_time":1700000000,"end_time":1700002400,"duration":2400,'
                     '"distance":3000,"calories":200,"steps":4000,"avg_hrm":100,'
-                    '"max_hrm":140,"avg_pace":800,"max_pace":500}'
+                    '"max_hrm":140,"avg_pace":800,"max_pace":500,"train_effect":2.5}'
                 ),
             }
         ]
@@ -169,6 +169,7 @@ async def test_iter_workouts_prefers_official_sport_records(monkeypatch):
     assert len(items) == 1
     workout = items[0]
     assert workout.activity_type == "outdoor_walking"
+    assert workout.sport_category == "walking"
     assert workout.duration_minutes == 40
     assert workout.distance_m == 3000
     assert workout.calories_kcal == 200
@@ -176,3 +177,4 @@ async def test_iter_workouts_prefers_official_sport_records(monkeypatch):
     assert workout.avg_heart_rate_bpm == 100
     assert workout.max_heart_rate_bpm == 140
     assert workout.avg_pace_sec_per_km == 800
+    assert workout.extended_metrics["train_effect"] == 2.5
