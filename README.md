@@ -120,7 +120,14 @@ Example `Claude Desktop` config:
 Workout analytics are available through `summarize_workouts`,
 `get_workout_records`, and `compare_workout_periods`. Summaries can be grouped
 by official activity type or ISO week, and comparisons include absolute and
-percentage changes in sessions, duration, distance, and calories.
+percentage changes in sessions, duration, distance, and calories. Records can
+be separated by activity and filtered by the date on which the current mark
+was achieved; pace records are included for running, walking, and hiking, and
+maximum speed is read from Xiaomi's extended sport metrics.
+Implausible GPS spikes are excluded using activity-specific speed thresholds;
+pace records also require at least one kilometre and five minutes of activity.
+When workouts are synchronized, `sync_data` returns `new_personal_records`
+containing any all-time record holders that changed during that sync.
 
 ## Commands
 

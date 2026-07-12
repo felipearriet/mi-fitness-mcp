@@ -144,6 +144,11 @@ async def list_tools() -> list[Tool]:
                     "start_date": {"type": "string"},
                     "end_date": {"type": "string"},
                     "activity_type": {"type": "string"},
+                    "group_by_activity": {"type": "boolean"},
+                    "achieved_since": {
+                        "type": "string",
+                        "description": "Only report current records achieved on or after this date",
+                    },
                     "min_duration_minutes": {"type": "integer", "minimum": 1},
                 },
                 "required": ["start_date", "end_date"],
@@ -270,6 +275,7 @@ async def _handle_sync_data(arguments: dict) -> dict:
     if not sync_service:
         return {"status": "error", "error": "Sync service not initialized"}
     data_types = arguments.get("data_types") or sync_service.adapter.get_available_data_types()
+    records_before = _workout_record_snapshot() if "workouts" in data_types else {}
     sync_id = str(uuid.uuid4())
     started_at = datetime.utcnow()
     total_added = 0
@@ -291,6 +297,7 @@ async def _handle_sync_data(arguments: dict) -> dict:
         except Exception as e:
             logger.error(f"Failed to sync {data_type}: {e}")
     finished_at = datetime.utcnow()
+    records_after = _workout_record_snapshot() if "workouts" in types_synced else {}
     return {
         "status": "ok",
         "sync_id": sync_id,
@@ -300,7 +307,35 @@ async def _handle_sync_data(arguments: dict) -> dict:
         "records_updated": total_updated,
         "records_skipped": total_skipped,
         "data_types_synced": types_synced,
+        "new_personal_records": _new_workout_records(records_before, records_after),
     }
+
+
+def _workout_record_snapshot() -> dict[str, dict[str, dict[str, Any]]]:
+    """Capture the current all-time record holders by activity."""
+    if not query_service:
+        return {}
+    result = query_service.get_workout_records("1900-01-01", "2100-12-31", group_by_activity=True)
+    return result.get("records_by_activity", {})
+
+
+def _new_workout_records(
+    before: dict[str, dict[str, dict[str, Any]]],
+    after: dict[str, dict[str, dict[str, Any]]],
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """Return record holders that changed as a result of synchronization."""
+    new_records = {}
+    for sport, sport_records in after.items():
+        changed = {}
+        for label, record in sport_records.items():
+            previous = before.get(sport, {}).get(label)
+            previous_id = previous.get("workout", {}).get("workout_id") if previous else None
+            current_id = record.get("workout", {}).get("workout_id")
+            if previous_id != current_id:
+                changed[label] = record
+        if changed:
+            new_records[sport] = changed
+    return new_records
 
 
 async def _handle_get_profile() -> dict:
@@ -397,7 +432,11 @@ async def _handle_summarize_workouts(arguments: dict) -> dict:
 
 async def _handle_get_workout_records(arguments: dict) -> dict:
     data = query_service.get_workout_records(
-        arguments["start_date"], arguments["end_date"], arguments.get("activity_type")
+        arguments["start_date"],
+        arguments["end_date"],
+        arguments.get("activity_type"),
+        arguments.get("group_by_activity", False),
+        arguments.get("achieved_since"),
     )
     return QueryResponse(status="ok", source="cache", data=data).model_dump()
 

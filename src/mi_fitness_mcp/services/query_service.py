@@ -275,27 +275,99 @@ class QueryService:
         return {"start_date": start_date, "end_date": end_date, "totals": totals, "groups": groups}
 
     def get_workout_records(
-        self, start_date: str, end_date: str, activity_type: str | None = None
+        self,
+        start_date: str,
+        end_date: str,
+        activity_type: str | None = None,
+        group_by_activity: bool = False,
+        achieved_since: str | None = None,
     ) -> dict[str, Any]:
-        """Return personal best workouts for common comparable metrics."""
+        """Return personal best workouts, optionally separated by activity."""
         workouts = self.get_workouts(
             start_date,
             end_date,
             activity_types=[activity_type] if activity_type else None,
         )
-        metrics = {
-            "longest_duration": "duration_minutes",
-            "longest_distance": "distance_m",
-            "most_calories": "calories_kcal",
-            "highest_avg_heart_rate": "avg_heart_rate_bpm",
+
+        def calculate(items: list[dict[str, Any]], sport: str | None = None) -> dict[str, Any]:
+            metrics = {
+                "longest_duration": ("duration_minutes", max),
+                "longest_distance": ("distance_m", max),
+                "most_calories": ("calories_kcal", max),
+                "highest_avg_heart_rate": ("avg_heart_rate_bpm", max),
+            }
+            if sport and any(token in sport for token in ("running", "walking", "hiking")):
+                metrics["fastest_avg_pace"] = ("avg_pace_sec_per_km", min)
+
+            result = {}
+            for label, (field, selector) in metrics.items():
+                candidates = [w for w in items if (w.get(field) or 0) > 0]
+                if label == "fastest_avg_pace":
+                    minimum_pace = 120 if "running" in (sport or "") else 180
+                    candidates = [
+                        w
+                        for w in candidates
+                        if w[field] >= minimum_pace
+                        and (w.get("distance_m") or 0) >= 1000
+                        and (w.get("duration_minutes") or 0) >= 5
+                    ]
+                if candidates:
+                    winner = selector(candidates, key=lambda workout: workout[field])
+                    result[label] = {"value": winner[field], "workout": winner}
+
+            speed_limits = {
+                "outdoor_walking": 20,
+                "outdoor_hiking": 25,
+                "outdoor_running": 45,
+                "outdoor_riding": 120,
+            }
+            speed_limit = speed_limits.get(sport or "")
+            speed_candidates = (
+                [
+                    w
+                    for w in items
+                    if 0 < (w.get("extended_metrics", {}).get("max_speed") or 0) <= speed_limit
+                ]
+                if speed_limit
+                else []
+            )
+            if speed_candidates:
+                winner = max(
+                    speed_candidates,
+                    key=lambda workout: workout["extended_metrics"]["max_speed"],
+                )
+                result["highest_max_speed"] = {
+                    "value": winner["extended_metrics"]["max_speed"],
+                    "workout": winner,
+                }
+            return result
+
+        records = calculate(workouts, activity_type)
+        response: dict[str, Any] = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "records": records,
         }
-        records = {}
-        for label, field in metrics.items():
-            candidates = [w for w in workouts if w.get(field) is not None]
-            if candidates:
-                winner = max(candidates, key=lambda workout: workout[field])
-                records[label] = {"value": winner[field], "workout": winner}
-        return {"start_date": start_date, "end_date": end_date, "records": records}
+        if group_by_activity:
+            activities = sorted({w["activity_type"] for w in workouts})
+            response["records_by_activity"] = {
+                sport: calculate([w for w in workouts if w["activity_type"] == sport], sport)
+                for sport in activities
+            }
+        if achieved_since:
+            pools = response.get("records_by_activity", {"all_activities": records})
+            response["new_records"] = {
+                sport: {
+                    label: record
+                    for label, record in sport_records.items()
+                    if str(record["workout"]["start_at"])[:10] >= achieved_since
+                }
+                for sport, sport_records in pools.items()
+            }
+            response["new_records"] = {
+                sport: values for sport, values in response["new_records"].items() if values
+            }
+        return response
 
     def compare_workout_periods(
         self,

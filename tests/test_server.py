@@ -29,3 +29,19 @@ async def test_query_workouts_tool_is_listed_and_calls_query_service(monkeypatch
     )
     assert result["status"] == "ok"
     assert result["data"]["count"] == 1
+
+
+def test_new_workout_records_reports_changed_record_holder():
+    before = {
+        "outdoor_running": {"longest_distance": {"value": 5000, "workout": {"workout_id": "old"}}}
+    }
+    after = {
+        "outdoor_running": {
+            "longest_distance": {"value": 6000, "workout": {"workout_id": "new"}},
+            "most_calories": {"value": 500, "workout": {"workout_id": "new"}},
+        }
+    }
+
+    changed = server._new_workout_records(before, after)
+
+    assert set(changed["outdoor_running"]) == {"longest_distance", "most_calories"}

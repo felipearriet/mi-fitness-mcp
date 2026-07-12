@@ -71,6 +71,14 @@ def test_storage_and_query_roundtrip(tmp_path):
     assert summary["groups"]["detected_activity"]["distance_m"] == 3000
     records = query.get_workout_records("2025-04-01", "2025-04-01")
     assert records["records"]["longest_distance"]["value"] == 3000
+    records_by_sport = query.get_workout_records(
+        "2025-04-01",
+        "2025-04-01",
+        group_by_activity=True,
+        achieved_since="2025-01-01",
+    )
+    assert records_by_sport["records_by_activity"]["detected_activity"]
+    assert records_by_sport["new_records"]["detected_activity"]
     comparison = query.compare_workout_periods(
         "2025-03-01", "2025-03-31", "2025-04-01", "2025-04-30"
     )
