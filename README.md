@@ -113,6 +113,14 @@ Example `Claude Desktop` config:
 - `Summarize my latest body measurements`
 - `Sync my latest Mi Fitness data`
 - `Show my detected workouts for the last 14 days`
+- `Summarize my workouts by sport for this year`
+- `What are my personal workout records?`
+- `Compare my workout volume in the last two weeks with the previous two weeks`
+
+Workout analytics are available through `summarize_workouts`,
+`get_workout_records`, and `compare_workout_periods`. Summaries can be grouped
+by official activity type or ISO week, and comparisons include absolute and
+percentage changes in sessions, duration, distance, and calories.
 
 ## Commands
 

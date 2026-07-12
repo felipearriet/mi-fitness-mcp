@@ -150,6 +150,51 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="summarize_workouts",
+            description="Summarize workout volume by sport or ISO week",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "start_date": {"type": "string"},
+                    "end_date": {"type": "string"},
+                    "group_by": {"type": "string", "enum": ["activity_type", "week"]},
+                },
+                "required": ["start_date", "end_date"],
+            },
+        ),
+        Tool(
+            name="get_workout_records",
+            description="Get personal workout records for a date range",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "start_date": {"type": "string"},
+                    "end_date": {"type": "string"},
+                    "activity_type": {"type": "string"},
+                },
+                "required": ["start_date", "end_date"],
+            },
+        ),
+        Tool(
+            name="compare_workout_periods",
+            description="Compare workout totals between two date ranges",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "first_start_date": {"type": "string"},
+                    "first_end_date": {"type": "string"},
+                    "second_start_date": {"type": "string"},
+                    "second_end_date": {"type": "string"},
+                },
+                "required": [
+                    "first_start_date",
+                    "first_end_date",
+                    "second_start_date",
+                    "second_end_date",
+                ],
+            },
+        ),
+        Tool(
             name="get_data_coverage",
             description="Get data coverage",
             inputSchema={
@@ -179,6 +224,12 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = await _handle_query_body_measurements(arguments)
         elif name == "query_workouts":
             result = await _handle_query_workouts(arguments)
+        elif name == "summarize_workouts":
+            result = await _handle_summarize_workouts(arguments)
+        elif name == "get_workout_records":
+            result = await _handle_get_workout_records(arguments)
+        elif name == "compare_workout_periods":
+            result = await _handle_compare_workout_periods(arguments)
         elif name == "get_data_coverage":
             result = await _handle_get_data_coverage(arguments)
         else:
@@ -335,6 +386,30 @@ async def _handle_query_workouts(arguments: dict) -> dict:
     return QueryResponse(
         status="ok", source="cache", data={"workouts": workouts, "count": len(workouts)}
     ).model_dump()
+
+
+async def _handle_summarize_workouts(arguments: dict) -> dict:
+    data = query_service.summarize_workouts(
+        arguments["start_date"], arguments["end_date"], arguments.get("group_by", "activity_type")
+    )
+    return QueryResponse(status="ok", source="cache", data=data).model_dump()
+
+
+async def _handle_get_workout_records(arguments: dict) -> dict:
+    data = query_service.get_workout_records(
+        arguments["start_date"], arguments["end_date"], arguments.get("activity_type")
+    )
+    return QueryResponse(status="ok", source="cache", data=data).model_dump()
+
+
+async def _handle_compare_workout_periods(arguments: dict) -> dict:
+    data = query_service.compare_workout_periods(
+        arguments["first_start_date"],
+        arguments["first_end_date"],
+        arguments["second_start_date"],
+        arguments["second_end_date"],
+    )
+    return QueryResponse(status="ok", source="cache", data=data).model_dump()
 
 
 async def _handle_get_data_coverage(arguments: dict) -> dict:

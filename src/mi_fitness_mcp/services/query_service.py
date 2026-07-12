@@ -239,6 +239,83 @@ class QueryService:
 
         return workouts
 
+    def summarize_workouts(
+        self, start_date: str, end_date: str, group_by: str = "activity_type"
+    ) -> dict[str, Any]:
+        """Aggregate workout volume for a date range."""
+        workouts = self.get_workouts(start_date, end_date)
+        groups: dict[str, dict[str, Any]] = {}
+        for workout in workouts:
+            if group_by == "week":
+                date = datetime.fromisoformat(str(workout["start_at"]))
+                year, week, _ = date.isocalendar()
+                key = f"{year}-W{week:02d}"
+            else:
+                key = workout["activity_type"]
+            group = groups.setdefault(
+                key,
+                {
+                    "workout_count": 0,
+                    "duration_minutes": 0,
+                    "distance_m": 0.0,
+                    "calories_kcal": 0.0,
+                },
+            )
+            group["workout_count"] += 1
+            group["duration_minutes"] += workout["duration_minutes"] or 0
+            group["distance_m"] += workout["distance_m"] or 0
+            group["calories_kcal"] += workout["calories_kcal"] or 0
+
+        totals = {
+            "workout_count": len(workouts),
+            "duration_minutes": sum(w["duration_minutes"] or 0 for w in workouts),
+            "distance_m": sum(w["distance_m"] or 0 for w in workouts),
+            "calories_kcal": sum(w["calories_kcal"] or 0 for w in workouts),
+        }
+        return {"start_date": start_date, "end_date": end_date, "totals": totals, "groups": groups}
+
+    def get_workout_records(
+        self, start_date: str, end_date: str, activity_type: str | None = None
+    ) -> dict[str, Any]:
+        """Return personal best workouts for common comparable metrics."""
+        workouts = self.get_workouts(
+            start_date,
+            end_date,
+            activity_types=[activity_type] if activity_type else None,
+        )
+        metrics = {
+            "longest_duration": "duration_minutes",
+            "longest_distance": "distance_m",
+            "most_calories": "calories_kcal",
+            "highest_avg_heart_rate": "avg_heart_rate_bpm",
+        }
+        records = {}
+        for label, field in metrics.items():
+            candidates = [w for w in workouts if w.get(field) is not None]
+            if candidates:
+                winner = max(candidates, key=lambda workout: workout[field])
+                records[label] = {"value": winner[field], "workout": winner}
+        return {"start_date": start_date, "end_date": end_date, "records": records}
+
+    def compare_workout_periods(
+        self,
+        first_start_date: str,
+        first_end_date: str,
+        second_start_date: str,
+        second_end_date: str,
+    ) -> dict[str, Any]:
+        """Compare total workout volume between two periods."""
+        first = self.summarize_workouts(first_start_date, first_end_date)["totals"]
+        second = self.summarize_workouts(second_start_date, second_end_date)["totals"]
+        changes = {}
+        for metric in first:
+            delta = second[metric] - first[metric]
+            changes[metric] = {
+                "absolute": delta,
+                "percent": round(delta / first[metric] * 100, 1) if first[metric] else None,
+            }
+        return {"first_period": first, "second_period": second, "changes": changes}
+
     def get_body_measurements(
         self,
         start_date: str,

@@ -66,5 +66,14 @@ def test_storage_and_query_roundtrip(tmp_path):
     assert len(workouts) == 1
     assert workouts[0]["sport_category"] == "walking"
     assert workouts[0]["extended_metrics"]["train_effect"] == 2.0
+    summary = query.summarize_workouts("2025-04-01", "2025-04-01")
+    assert summary["totals"]["workout_count"] == 1
+    assert summary["groups"]["detected_activity"]["distance_m"] == 3000
+    records = query.get_workout_records("2025-04-01", "2025-04-01")
+    assert records["records"]["longest_distance"]["value"] == 3000
+    comparison = query.compare_workout_periods(
+        "2025-03-01", "2025-03-31", "2025-04-01", "2025-04-30"
+    )
+    assert comparison["changes"]["workout_count"] == {"absolute": 1, "percent": None}
     assert db.delete_detected_workouts("u1", "2025-04-01", "2025-04-01") == 1
     assert query.get_workouts("2025-04-01", "2025-04-01") == []
