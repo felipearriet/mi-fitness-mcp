@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from mi_fitness_mcp.adapters.mi_fitness_cloud import MiFitnessCloudAdapter
@@ -28,6 +30,7 @@ def test_record_datetime_uses_zone_offset():
     adapter = MiFitnessCloudAdapter(user_id="u1", pass_token="p1")
     dt = adapter._record_datetime({"time": 0, "zone_offset": 10800})
     assert dt.isoformat().startswith("1970-01-01T03:00:00")
+
 
 @pytest.mark.asyncio
 async def test_iter_daily_activity_aggregates_steps_and_calories(monkeypatch):
@@ -63,3 +66,63 @@ async def test_iter_daily_activity_aggregates_steps_and_calories(monkeypatch):
     assert items[0].steps == 30
     assert items[0].distance_m == 24
     assert items[0].active_kcal == 12
+
+
+@pytest.mark.asyncio
+async def test_iter_workouts_detects_sustained_intensity(monkeypatch):
+    adapter = MiFitnessCloudAdapter(user_id="u1", pass_token="p1")
+    adapter._connected = True
+    adapter._client = object()
+    start = 1_700_000_000
+
+    async def fake_fetch(key, start_date, end_date, region=None):
+        if key == "intensity":
+            return [
+                {"time": start + minute * 60, "zone_offset": -10800, "value": "{}"}
+                for minute in range(10)
+            ]
+        if key == "steps":
+            return [
+                {
+                    "time": start,
+                    "value": '{"steps": 1200, "distance": 900, "calories": 60}',
+                }
+            ]
+        if key == "calories":
+            return [{"time": start, "value": '{"calories": 75}'}]
+        if key == "heart_rate":
+            return [
+                {"time": start, "value": '{"bpm": 100}'},
+                {"time": start + 60, "value": '{"bpm": 140}'},
+            ]
+        return []
+
+    monkeypatch.setattr(adapter, "_fetch_key", fake_fetch)
+    items = await _collect(adapter.iter_workouts("2023-11-14", "2023-11-14"))
+
+    assert len(items) == 1
+    workout = items[0]
+    assert workout.activity_type == "detected_activity"
+    assert workout.duration_minutes == 10
+    assert workout.distance_m == 900
+    assert workout.calories_kcal == 75
+    assert workout.total_steps == 1200
+    assert workout.avg_heart_rate_bpm == 120
+    assert workout.max_heart_rate_bpm == 140
+    assert workout.start_at == datetime.fromtimestamp(start - 10800, tz=UTC).replace(tzinfo=None)
+
+
+@pytest.mark.asyncio
+async def test_iter_workouts_ignores_short_intensity_bursts(monkeypatch):
+    adapter = MiFitnessCloudAdapter(user_id="u1", pass_token="p1")
+    adapter._connected = True
+    adapter._client = object()
+
+    async def fake_fetch(key, start_date, end_date, region=None):
+        if key == "intensity":
+            return [{"time": 1_700_000_000 + minute * 60, "value": "{}"} for minute in range(5)]
+        raise AssertionError(f"unexpected fetch for {key}")
+
+    monkeypatch.setattr(adapter, "_fetch_key", fake_fetch)
+    items = await _collect(adapter.iter_workouts("2023-11-14", "2023-11-14"))
+    assert items == []

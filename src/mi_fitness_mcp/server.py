@@ -133,6 +133,23 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="query_workouts",
+            description=(
+                "Query workout sessions. When Xiaomi omits explicit sport records, "
+                "sessions are returned as detected_activity based on sustained intensity."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "start_date": {"type": "string"},
+                    "end_date": {"type": "string"},
+                    "activity_type": {"type": "string"},
+                    "min_duration_minutes": {"type": "integer", "minimum": 1},
+                },
+                "required": ["start_date", "end_date"],
+            },
+        ),
+        Tool(
             name="get_data_coverage",
             description="Get data coverage",
             inputSchema={
@@ -160,6 +177,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = await _handle_query_heart_rate(arguments)
         elif name == "query_body_measurements":
             result = await _handle_query_body_measurements(arguments)
+        elif name == "query_workouts":
+            result = await _handle_query_workouts(arguments)
         elif name == "get_data_coverage":
             result = await _handle_get_data_coverage(arguments)
         else:
@@ -301,6 +320,20 @@ async def _handle_query_body_measurements(arguments: dict) -> dict:
         measurements = [measurements[-1]]
     return QueryResponse(
         status="ok", source="cache", data={"measurements": measurements, "count": len(measurements)}
+    ).model_dump()
+
+
+async def _handle_query_workouts(arguments: dict) -> dict:
+    if not query_service:
+        return {"status": "error", "error": "Query service not initialized"}
+    workouts = query_service.get_workouts(
+        start_date=arguments["start_date"],
+        end_date=arguments["end_date"],
+        activity_types=[arguments["activity_type"]] if arguments.get("activity_type") else None,
+        min_duration=arguments.get("min_duration_minutes"),
+    )
+    return QueryResponse(
+        status="ok", source="cache", data={"workouts": workouts, "count": len(workouts)}
     ).model_dump()
 
 

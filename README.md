@@ -17,6 +17,10 @@ Confirmed with the current cloud flow:
   - distance
   - active calories
 - heart rate
+- detected workout sessions
+  - duration, distance, steps, and calories
+  - average and maximum heart rate
+  - average pace when distance is available
 - body measurements
   - weight
   - BMI
@@ -27,7 +31,18 @@ Confirmed with the current cloud flow:
 Not yet confirmed with the current Xiaomi cloud endpoint:
 
 - sleep
-- workouts
+- explicit Xiaomi sport records and sport labels
+
+### Workout detection fallback
+
+Mi Fitness Global can omit the `sport_record` collection even when it uploads
+minute-level intensity, steps, calories, and heart-rate data. In that case this
+fork groups consecutive intensity markers into sessions of at least 10 minutes
+and stores them with the activity type `detected_activity`.
+
+This deliberately does not guess whether a session was running, cycling, or
+another sport. Gaps longer than two minutes split sessions, so workouts with a
+pause can appear as multiple records.
 
 ## Install
 
@@ -69,6 +84,7 @@ python probe_mifitness.py --user-id "<userId>" --pass-token "<passToken>"
 
 ```bash
 mi-fitness-mcp sync --start-date 2025-04-01 --end-date 2025-05-31
+mi-fitness-mcp sync --type workouts --start-date 2025-04-01 --end-date 2025-05-31
 mi-fitness-mcp serve
 ```
 
@@ -93,6 +109,7 @@ Example `Claude Desktop` config:
 - `How has my resting heart rate changed this month?`
 - `Summarize my latest body measurements`
 - `Sync my latest Mi Fitness data`
+- `Show my detected workouts for the last 14 days`
 
 ## Commands
 

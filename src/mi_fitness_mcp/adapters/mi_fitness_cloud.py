@@ -241,6 +241,11 @@ class MiFitnessCloudAdapter(DataAdapter):
                     types.append(data_type)
             except Exception:
                 continue
+        try:
+            if await self._fetch_key("intensity", "2025-04-01", "2025-05-31"):
+                types.append("workouts")
+        except Exception:
+            pass
         return types
 
     def _record_datetime(self, item: dict) -> datetime:
@@ -321,8 +326,95 @@ class MiFitnessCloudAdapter(DataAdapter):
         start_date: str | None = None,
         end_date: str | None = None,
     ) -> AsyncIterator[Workout]:
-        if False:
+        if not self.is_connected() or not start_date or not end_date:
+            return
             yield
+
+        intensity_records = await self._fetch_key("intensity", start_date, end_date)
+        if not intensity_records:
+            return
+
+        timestamps = sorted(
+            {int(item.get("time", 0)) for item in intensity_records if item.get("time")}
+        )
+        sessions: list[list[int]] = []
+        for timestamp in timestamps:
+            if not sessions or timestamp - sessions[-1][-1] > 120:
+                sessions.append([timestamp])
+            else:
+                sessions[-1].append(timestamp)
+
+        # Short bursts are more likely to be ordinary movement than workouts.
+        sessions = [session for session in sessions if session[-1] - session[0] >= 9 * 60]
+        if not sessions:
+            return
+
+        steps_records, calorie_records, heart_rate_records = await asyncio.gather(
+            self._fetch_key("steps", start_date, end_date),
+            self._fetch_key("calories", start_date, end_date),
+            self._fetch_key("heart_rate", start_date, end_date),
+        )
+
+        def records_between(records: list[dict], start: int, end: int) -> list[dict]:
+            return [item for item in records if start <= int(item.get("time", 0)) <= end]
+
+        for session in sessions:
+            start_ts = session[0]
+            end_ts = session[-1] + 60
+            first_marker = next(
+                item for item in intensity_records if int(item.get("time", 0)) == start_ts
+            )
+            zone_offset = int(first_marker.get("zone_offset", 0))
+            step_items = records_between(steps_records, start_ts, end_ts)
+            calorie_items = records_between(calorie_records, start_ts, end_ts)
+            hr_items = records_between(heart_rate_records, start_ts, end_ts)
+
+            total_steps = 0
+            distance_m = 0.0
+            step_calories = 0.0
+            for item in step_items:
+                payload = self._parse_value(item)
+                total_steps += int(payload.get("steps", 0))
+                distance_m += float(payload.get("distance", 0))
+                step_calories += float(payload.get("calories", 0))
+
+            calories_kcal = sum(
+                float(self._parse_value(item).get("calories", 0)) for item in calorie_items
+            )
+            if not calories_kcal:
+                calories_kcal = step_calories
+
+            bpm_values = []
+            for item in hr_items:
+                bpm = int(self._parse_value(item).get("bpm", 0))
+                if bpm > 0:
+                    bpm_values.append(bpm)
+
+            duration_seconds = max(60, end_ts - start_ts)
+            avg_pace = duration_seconds / (distance_m / 1000) if distance_m > 0 else None
+
+            yield Workout(
+                id=f"mi_fitness_detected_workout_{start_ts}",
+                provider="mi_fitness",
+                source_type="cloud_session",
+                source_record_id=f"intensity:{start_ts}",
+                user_id=self.user_id or "unknown",
+                workout_id=f"detected_{start_ts}",
+                activity_type="detected_activity",
+                start_at=datetime.fromtimestamp(start_ts + zone_offset, tz=UTC).replace(
+                    tzinfo=None
+                ),
+                end_at=datetime.fromtimestamp(end_ts + zone_offset, tz=UTC).replace(tzinfo=None),
+                duration_minutes=max(1, round(duration_seconds / 60)),
+                distance_m=distance_m or None,
+                calories_kcal=calories_kcal or None,
+                avg_heart_rate_bpm=(
+                    round(sum(bpm_values) / len(bpm_values)) if bpm_values else None
+                ),
+                max_heart_rate_bpm=max(bpm_values) if bpm_values else None,
+                avg_pace_sec_per_km=avg_pace,
+                total_steps=total_steps or None,
+            )
 
     async def iter_body_measurements(
         self,
