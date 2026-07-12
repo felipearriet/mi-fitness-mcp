@@ -95,7 +95,11 @@ class SyncService:
 
         elif data_type == "workouts":
             records = self.adapter.iter_workouts(start_date, end_date)
+            removed_detected = False
             async for workout in self._iterate_records(records):
+                if workout.activity_type != "detected_activity" and not removed_detected:
+                    self.db.delete_detected_workouts(workout.user_id, start_date, end_date)
+                    removed_detected = True
                 if self.db.insert_workout(workout):
                     added += 1
                 else:

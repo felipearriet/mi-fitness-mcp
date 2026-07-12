@@ -333,6 +333,21 @@ class Database:
             conn.commit()
             return cursor.rowcount > 0
 
+    def delete_detected_workouts(self, user_id: str, start_date: str, end_date: str) -> int:
+        """Delete inferred workouts when official sport records are available."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM workouts
+                WHERE user_id = ?
+                  AND activity_type = 'detected_activity'
+                  AND date(start_at) BETWEEN ? AND ?
+                """,
+                (user_id, start_date, end_date),
+            )
+            conn.commit()
+            return cursor.rowcount
+
     def insert_body_measurement(self, measurement: BodyMeasurement) -> bool:
         """Insert or update body measurement record."""
         with self._get_connection() as conn:

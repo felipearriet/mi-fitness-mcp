@@ -6,7 +6,7 @@ import os
 import struct
 from collections import defaultdict
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
 
@@ -213,6 +213,43 @@ class MiFitnessCloudAdapter(DataAdapter):
 
         return items
 
+    async def _fetch_sport_records(self, start_date: str, end_date: str) -> list[dict]:
+        base_url = (
+            "https://hlth.io.mi.com"
+            if self.region in ("", "cn")
+            else f"https://{self.region}.hlth.io.mi.com"
+        )
+        range_start = datetime.fromisoformat(start_date)
+        range_end = datetime.fromisoformat(end_date)
+        records: list[dict] = []
+
+        # Xiaomi rejects large time windows and limits each page to 20 records.
+        chunk_start = range_start
+        while chunk_start <= range_end:
+            chunk_end = min(chunk_start + timedelta(days=29), range_end)
+            next_key = ""
+            while True:
+                payload = {
+                    "category": "",
+                    "start_time": int(chunk_start.replace(tzinfo=UTC).timestamp()),
+                    "end_time": int(
+                        chunk_end.replace(hour=23, minute=59, second=59, tzinfo=UTC).timestamp()
+                    ),
+                    "reverse": True,
+                    "next_key": next_key,
+                    "limit": 20,
+                }
+                result = await self._request(
+                    base_url, "/app/v1/data/get_sport_records_by_time", payload
+                )
+                records.extend(result.get("sport_records", []))
+                if not result.get("has_more") or not result.get("next_key"):
+                    break
+                next_key = str(result["next_key"])
+            chunk_start = chunk_end + timedelta(days=1)
+
+        return records
+
     async def _discover_region(self, preferred_region: str) -> str:
         candidates = [preferred_region] + [
             region for region in KNOWN_REGIONS if region != preferred_region
@@ -329,6 +366,44 @@ class MiFitnessCloudAdapter(DataAdapter):
         if not self.is_connected() or not start_date or not end_date:
             return
             yield
+
+        sport_records = await self._fetch_sport_records(start_date, end_date)
+        if sport_records:
+            for record in sport_records:
+                payload = self._parse_value(record)
+                start_ts = int(payload.get("start_time", record.get("time", 0)))
+                end_ts = int(payload.get("end_time", start_ts))
+                zone_offset = int(record.get("zone_offset", 0))
+                duration_seconds = int(payload.get("duration", max(0, end_ts - start_ts)))
+                sid = str(record.get("sid", "unknown"))
+                activity_type = str(record.get("key") or record.get("category") or "unknown")
+
+                yield Workout(
+                    id=f"mi_fitness_workout_{sid}_{start_ts}",
+                    provider="mi_fitness",
+                    source_type="cloud_session",
+                    source_record_id=f"{sid}:{start_ts}:{activity_type}",
+                    user_id=self.user_id or "unknown",
+                    device_id=None if sid == "unknown" else sid,
+                    timezone=str(record.get("zone_name") or "UTC"),
+                    workout_id=f"{sid}_{start_ts}_{activity_type}",
+                    activity_type=activity_type,
+                    start_at=datetime.fromtimestamp(start_ts + zone_offset, tz=UTC).replace(
+                        tzinfo=None
+                    ),
+                    end_at=datetime.fromtimestamp(end_ts + zone_offset, tz=UTC).replace(
+                        tzinfo=None
+                    ),
+                    duration_minutes=max(1, round(duration_seconds / 60)),
+                    distance_m=self._optional_float(payload.get("distance")),
+                    calories_kcal=self._optional_float(payload.get("calories")),
+                    avg_heart_rate_bpm=self._optional_int(payload.get("avg_hrm")),
+                    max_heart_rate_bpm=self._optional_int(payload.get("max_hrm")),
+                    avg_pace_sec_per_km=self._optional_float(payload.get("avg_pace")),
+                    max_pace_sec_per_km=self._optional_float(payload.get("max_pace")),
+                    total_steps=self._optional_int(payload.get("steps")),
+                )
+            return
 
         intensity_records = await self._fetch_key("intensity", start_date, end_date)
         if not intensity_records:

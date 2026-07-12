@@ -17,7 +17,8 @@ Confirmed with the current cloud flow:
   - distance
   - active calories
 - heart rate
-- detected workout sessions
+- workout sessions from Xiaomi sport records
+  - activity category and type
   - duration, distance, steps, and calories
   - average and maximum heart rate
   - average pace when distance is available
@@ -28,17 +29,17 @@ Confirmed with the current cloud flow:
   - visceral fat
   - basal metabolism
 
-Not yet confirmed with the current Xiaomi cloud endpoint:
+Not yet confirmed with the current Xiaomi cloud flow:
 
 - sleep
-- explicit Xiaomi sport records and sport labels
 
 ### Workout detection fallback
 
-Mi Fitness Global can omit the `sport_record` collection even when it uploads
-minute-level intensity, steps, calories, and heart-rate data. In that case this
-fork groups consecutive intensity markers into sessions of at least 10 minutes
-and stores them with the activity type `detected_activity`.
+The adapter reads explicit sport records from Xiaomi's
+`data/get_sport_records_by_time` endpoint. If an account has no explicit records
+for the requested range but does have minute-level intensity, steps, calories,
+and heart-rate data, it groups consecutive intensity markers into sessions of
+at least 10 minutes and stores them with the activity type `detected_activity`.
 
 This deliberately does not guess whether a session was running, cycling, or
 another sport. Gaps longer than two minutes split sessions, so workouts with a

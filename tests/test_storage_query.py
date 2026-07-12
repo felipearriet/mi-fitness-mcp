@@ -60,3 +60,5 @@ def test_storage_and_query_roundtrip(tmp_path):
     assert len(query.get_heart_rate_samples("2025-04-01", "2025-04-01")) == 1
     assert len(query.get_body_measurements("2025-04-01", "2025-04-01")) == 1
     assert len(query.get_workouts("2025-04-01", "2025-04-01")) == 1
+    assert db.delete_detected_workouts("u1", "2025-04-01", "2025-04-01") == 1
+    assert query.get_workouts("2025-04-01", "2025-04-01") == []

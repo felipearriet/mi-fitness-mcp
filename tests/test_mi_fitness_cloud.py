@@ -97,7 +97,11 @@ async def test_iter_workouts_detects_sustained_intensity(monkeypatch):
             ]
         return []
 
+    async def no_sport_records(start_date, end_date):
+        return []
+
     monkeypatch.setattr(adapter, "_fetch_key", fake_fetch)
+    monkeypatch.setattr(adapter, "_fetch_sport_records", no_sport_records)
     items = await _collect(adapter.iter_workouts("2023-11-14", "2023-11-14"))
 
     assert len(items) == 1
@@ -123,6 +127,52 @@ async def test_iter_workouts_ignores_short_intensity_bursts(monkeypatch):
             return [{"time": 1_700_000_000 + minute * 60, "value": "{}"} for minute in range(5)]
         raise AssertionError(f"unexpected fetch for {key}")
 
+    async def no_sport_records(start_date, end_date):
+        return []
+
     monkeypatch.setattr(adapter, "_fetch_key", fake_fetch)
+    monkeypatch.setattr(adapter, "_fetch_sport_records", no_sport_records)
     items = await _collect(adapter.iter_workouts("2023-11-14", "2023-11-14"))
     assert items == []
+
+
+@pytest.mark.asyncio
+async def test_iter_workouts_prefers_official_sport_records(monkeypatch):
+    adapter = MiFitnessCloudAdapter(user_id="u1", pass_token="p1")
+    adapter._connected = True
+    adapter._client = object()
+
+    async def fake_sport_records(start_date, end_date):
+        return [
+            {
+                "sid": "device1",
+                "category": "walking",
+                "key": "outdoor_walking",
+                "time": 1_700_000_000,
+                "zone_offset": -10800,
+                "zone_name": "America/Santiago",
+                "value": (
+                    '{"start_time":1700000000,"end_time":1700002400,"duration":2400,'
+                    '"distance":3000,"calories":200,"steps":4000,"avg_hrm":100,'
+                    '"max_hrm":140,"avg_pace":800,"max_pace":500}'
+                ),
+            }
+        ]
+
+    async def unexpected_fetch(*args, **kwargs):
+        raise AssertionError("intensity fallback should not run")
+
+    monkeypatch.setattr(adapter, "_fetch_sport_records", fake_sport_records)
+    monkeypatch.setattr(adapter, "_fetch_key", unexpected_fetch)
+    items = await _collect(adapter.iter_workouts("2023-11-14", "2023-11-14"))
+
+    assert len(items) == 1
+    workout = items[0]
+    assert workout.activity_type == "outdoor_walking"
+    assert workout.duration_minutes == 40
+    assert workout.distance_m == 3000
+    assert workout.calories_kcal == 200
+    assert workout.total_steps == 4000
+    assert workout.avg_heart_rate_bpm == 100
+    assert workout.max_heart_rate_bpm == 140
+    assert workout.avg_pace_sec_per_km == 800
